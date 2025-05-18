@@ -1,59 +1,129 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 import os
+import time
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 
-# Base URL of the companies to scrape
-COMP = {
+COMPANIES = {
     "DIPD": "https://www.cse.lk/pages/company-profile/company-profile.component.html?symbol=DIPD.N0000",
     "REXP": "https://www.cse.lk/pages/company-profile/company-profile.component.html?symbol=REXP.N0000"
 }
 
-DOWNLOAD_DIR = "data/raw"
+BASE_SAVE_DIR = "data/raw"
 
-# Function to download a file from a URL
-def download_file(url, save_path):
+
+def setup_driver():
+    options = Options()
+    options.add_argument("--headless")  # Optional: run browser in background
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
+
+
+def download_pdf(url, save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+    filename = url.split("/")[-1]
+    save_path = os.path.join(save_dir, filename)
+
+    if os.path.exists(save_path):
+        print(f"✅ Already downloaded: {filename}")
+        return
+
     try:
         response = requests.get(url)
         response.raise_for_status()
-        with open(save_path, 'wb') as file:
-            file.write(response.content)
-        print(f"Downloaded: {save_path}")
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to download {url}: {e}")
+        with open(save_path, "wb") as f:
+            f.write(response.content)
+        print(f"✅ Downloaded: {filename}")
+    except Exception as e:
+        print(f"❌ Error downloading {url}: {e}")
 
-# Function to scrape the website and download PDF files
-def scrape_and_download_pdfs(base_url, company):
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+import os
+import time
+import requests
+
+COMPANIES = {
+    "DIPD": "https://www.cse.lk/pages/company-profile/company-profile.component.html?symbol=DIPD.N0000",
+    "REXP": "https://www.cse.lk/pages/company-profile/company-profile.component.html?symbol=REXP.N0000"
+}
+
+BASE_SAVE_DIR = "data/raw"
+
+
+def setup_driver():
+    options = Options()
+    options.add_argument("--headless")  # Optional: run browser in background
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
+
+
+def download_pdf(url, save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+    filename = url.split("/")[-1]
+    save_path = os.path.join(save_dir, filename)
+
+    if os.path.exists(save_path):
+        print(f"✅ Already downloaded: {filename}")
+        return
+
     try:
-        response = requests.get(base_url)
+        response = requests.get(url)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        with open(save_path, "wb") as f:
+            f.write(response.content)
+        print(f"✅ Downloaded: {filename}")
+    except Exception as e:
+        print(f"❌ Error downloading {url}: {e}")
 
-        # Find all PDF links on the page
-        pdf_links = [
-            urljoin(base_url, link['href'])
-            for link in soup.find_all('a', href=True)
-            if link['href'].endswith('.pdf')
-        ]
 
-        # Ensure save folder exists
-        save_folder = os.path.join(DOWNLOAD_DIR, company)
-        os.makedirs(save_folder, exist_ok=True)
+def scrape_company(driver, company, url):
+    print(f"\n🔍 Scraping ONLY QUARTERLY PDF reports for {company}...")
+    driver.get(url)
+    time.sleep(5)  # Allow JS to load all sections
 
-        # Download each PDF file
-        for pdf_url in pdf_links:
-            file_name = pdf_url.split("/")[-1]
-            save_path = os.path.join(save_folder, file_name)
-            download_file(pdf_url, save_path)
+    try:
+        # Locate the quarterly section directly (ID = 21b)
+        quarterly_section = driver.find_element(By.ID, "21b")
 
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to scrape {base_url}: {e}")
+        # Look for PDF links only inside the quarterly section
+        links = quarterly_section.find_elements(By.XPATH, './/a[contains(@href, ".pdf")]')
+
+        if not links:
+            print("⚠️ No quarterly PDF links found.")
+            return
+
+        for link in links:
+            pdf_url = link.get_attribute("href")
+            if pdf_url and "/upload_report_file/" in pdf_url:
+                download_pdf(pdf_url, os.path.join(BASE_SAVE_DIR, company))
+    except Exception as e:
+        print(f"❌ Error scraping quarterly PDFs for {company}: {e}")
+
+
 
 def main():
-    for company, base_url in COMP.items():
-        print(f"Scraping {company}...")
-        scrape_and_download_pdfs(base_url, company)
-        print(f"Finished scraping {company}.\n")
+    driver = setup_driver()
+    for company, url in COMPANIES.items():
+        scrape_company(driver, company, url)
+    driver.quit()
+
+
 
 if __name__ == "__main__":
     main()
