@@ -33,6 +33,15 @@ regex_patterns = {
     'Net Income': re.compile(r'^(Profit / \(loss\) (for the period|Attributable to Ordinary Shareholders))', re.IGNORECASE),
 }
 
+# --- Period extraction ---
+period_pattern = re.compile(r'\b(Q[1-4]|H[1-2]|FY\s?\d{2,4}|\d{4})\b', re.IGNORECASE)
+
+def extract_period(text):
+    matches = period_pattern.findall(text)
+    return matches[0].upper() if matches else None
+
+# --- Helper functions ---
+
 def extract_numbers(text):
     raw_numbers = re.findall(r'-?\(?\d[\d,]*\)?', text)
     cleaned = []
@@ -47,7 +56,6 @@ def extract_numbers(text):
     return cleaned
 
 def match_label_flexible(text, patterns):
-    # Flexible keyword-based matching (used for DIPD)
     for label, keywords in patterns.items():
         for keyword in keywords:
             if keyword.lower() in text.lower():
@@ -55,7 +63,6 @@ def match_label_flexible(text, patterns):
     return None
 
 def match_label_spacy(text, patterns):
-    # spaCy-based or exact matching (used for REXP)
     for label, keywords in patterns.items():
         for keyword in keywords:
             if keyword.lower() in text.lower():
@@ -70,6 +77,7 @@ def process_dataframe(df, use_flexible_matching=False):
         row_data = {
             'filename': filename,
             'page': page,
+            'period': None,
             'Revenue': None,
             'COGS': None,
             'Gross Profit': None,
@@ -83,6 +91,13 @@ def process_dataframe(df, use_flexible_matching=False):
             if not text.strip():
                 continue
 
+            # Extract period if not already found
+            if row_data['period'] is None:
+                period = extract_period(text)
+                if period:
+                    row_data['period'] = period
+
+            # Match financial label
             if use_flexible_matching:
                 label = match_label_flexible(text, financial_keywords)
             else:
@@ -93,23 +108,19 @@ def process_dataframe(df, use_flexible_matching=False):
                 if numbers:
                     row_data[label] = numbers[0]
 
-        # Post-processing fixes and calculations
+        # --- Post-processing calculations ---
 
-        # Make sure COGS is positive
         if row_data['COGS'] is not None:
             row_data['COGS'] = abs(row_data['COGS'])
 
-        # Calculate Gross Profit if missing but possible
         if row_data['Gross Profit'] is None:
             if row_data['Revenue'] is not None and row_data['COGS'] is not None:
                 row_data['Gross Profit'] = row_data['Revenue'] - row_data['COGS']
 
-        # Calculate Operating Income if missing but possible
         if row_data['Operating Income'] is None:
             if row_data['Gross Profit'] is not None and row_data['Operating Expenses'] is not None:
                 row_data['Operating Income'] = row_data['Gross Profit'] - row_data['Operating Expenses']
 
-        # Estimate Net Income if missing
         if row_data['Net Income'] is None:
             if (row_data['Revenue'] is not None and
                 row_data['COGS'] is not None and
@@ -122,6 +133,8 @@ def process_dataframe(df, use_flexible_matching=False):
 
     return pd.DataFrame(results)
 
+def clean_null_rows(df):
+    return df.dropna(how='all')
 
 # --- Main processing ---
 
@@ -131,17 +144,18 @@ for company, path in input_files.items():
     df = pd.read_csv(path)
 
     if company == "REXP":
-        # Use spaCy / exact keyword matching (works better for REXP)
         summary = process_dataframe(df, use_flexible_matching=False)
     else:
-        # Use flexible matching for DIPD (your original DIPD approach)
         summary = process_dataframe(df, use_flexible_matching=True)
+
+    summary = clean_null_rows(summary)
 
     summary.to_csv(os.path.join(output_dir, f"{company}_financial_summary.csv"), index=False)
     summary_dfs.append(summary)
 
-# Combine both company summaries into one file
+# Combine summaries
 combined = pd.concat(summary_dfs, ignore_index=True)
+combined = clean_null_rows(combined)
 combined.to_csv(os.path.join(output_dir, "combined_financial_summary.csv"), index=False)
 
-print("✅ Processed REXP, DIPD, and combined financial summaries saved.")
+print("✅ Processed REXP, DIPD, and combined financial summaries saved with periods.")
