@@ -5,7 +5,7 @@ import plotly.express as px
 # Load data
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/financial_summaries/combined_financial_summary.csv")
+    df = pd.read_csv("data\\financial_summaries\\combined_financial_summary.csv")
     df.dropna(subset=["Revenue", "Net Income"], inplace=True)
     # Ensure 'period' is integer and clean
     df['period'] = pd.to_numeric(df['period'], errors='coerce')
