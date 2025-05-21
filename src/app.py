@@ -29,59 +29,63 @@ selected_years = st.sidebar.multiselect("Select Years", all_periods, default=all
 # Filter by company and selected years (for all tabs)
 filtered_df = df[(df['company'] == selected_company) & (df['period'].isin(selected_years))]
 
-# Metrics for tabs
-metrics = [
-    "Revenue",
-    "Cost of Goods Sold (COGS)",
-    "Gross Profit",
-    "Operating Expenses",
-    "Operating Income",
-    "Net Income"
-]
+# Display name to actual column mapping
+metrics = {
+    "Revenue": "Revenue",
+    "Cost of Goods Sold (COGS)": "COGS",
+    "Gross Profit": "Gross Profit",
+    "Operating Expenses": "Operating Expenses",
+    "Operating Income": "Operating Income",
+    "Net Income": "Net Income"
+}
 
-st.title(f"Financial Metrics Trend for {selected_company}")
+# Create tabs using display names
+tabs = st.tabs(list(metrics.keys()))
 
-# Create tabs for each metric
-tabs = st.tabs(metrics)
-
-for i, metric in enumerate(metrics):
+for i, (display_name, column_name) in enumerate(metrics.items()):
     with tabs[i]:
-        metric_col = metric  # column names should match exactly as in your dataframe
-        if metric_col not in filtered_df.columns:
-            st.warning(f"No data available for {metric}.")
+        if column_name not in filtered_df.columns:
+            st.warning(f"No data available for {display_name}.")
             continue
 
-        metric_data = filtered_df.dropna(subset=[metric_col])
+        metric_data = filtered_df.dropna(subset=[column_name])
 
         if metric_data.empty:
-            st.warning(f"No data available for {metric} with selected filters.")
+            st.warning(f"No data available for {display_name} with selected filters.")
         else:
             fig = px.line(
                 metric_data.sort_values("period"),
                 x="period",
-                y=metric_col,
+                y=column_name,
                 markers=True,
-                title=f"{metric} over Time for {selected_company}",
-                labels={"period": "Year", metric_col: metric}
+                title=f"{display_name} over Time for {selected_company}",
+                labels={"period": "Year", column_name: display_name}
             )
             fig.update_traces(mode="lines+markers", hovertemplate=f"%{{y:.2f}}")
             st.plotly_chart(fig, use_container_width=True)
 
+
 # --- Comparison Chart ---
 st.subheader("Compare with Another Company")
 
-comparison_company = st.selectbox(
-    "Select Company for Comparison",
-    [c for c in company_names if c != selected_company]
-)
+# Select another company for comparison (excluding the already selected one)
+comparison_companies = [c for c in company_names if c != selected_company]
+if comparison_companies:
+    comparison_company = st.selectbox("Select Comparison Company", comparison_companies)
+    # Filter df for comparison company and selected years
+    df_comp = df[(df['company'] == comparison_company) & (df['period'].isin(selected_years))]
+else:
+    comparison_company = None
+    df_comp = pd.DataFrame()
 
-df_comp = df[(df['company'] == comparison_company) & (df['period'].isin(selected_years))]
+# Ensure metric display names are used and mapped to real column names
+metric_display_names = list(metrics.keys())
+comparison_metric_display = st.selectbox("Select Metric for Comparison", metric_display_names, index=0)
+comparison_metric = metrics[comparison_metric_display]  # Get actual column name
 
-# Comparison metric selection for consistency with main tabs
-comparison_metric = st.selectbox("Select Metric for Comparison", metrics, index=metrics.index("Revenue"))
-
-if comparison_metric not in df_comp.columns:
-    st.warning(f"No data available for {comparison_metric} for comparison company.")
+# Check if the selected metric exists in the DataFrame
+if df_comp.empty or comparison_metric not in df_comp.columns:
+    st.warning(f"No data available for '{comparison_metric_display}' for comparison company.")
 else:
     comp_data = df_comp.dropna(subset=[comparison_metric])
 
@@ -93,8 +97,8 @@ else:
             x="period",
             y=comparison_metric,
             markers=True,
-            title=f"{comparison_metric} Comparison with {comparison_company}",
-            labels={"period": "Year", comparison_metric: comparison_metric}
+            title=f"{comparison_metric_display} Comparison with {comparison_company}",
+            labels={"period": "Year", comparison_metric: comparison_metric_display}
         )
-        fig2.update_traces(mode="lines+markers", hovertemplate=f"%{{y:.2f}}", line=dict(dash="dot"))
+        fig2.update_traces(mode="lines+markers", hovertemplate="%{y:.2f}", line=dict(dash="dot"))
         st.plotly_chart(fig2, use_container_width=True)
