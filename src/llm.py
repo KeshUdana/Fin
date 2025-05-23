@@ -10,7 +10,9 @@ import os
 import re
 
 # Set Hugging Face token
-os.environ["HUGGINGFACE_TOKEN"] = "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"
+os.environ["HUGGINGFACE_TOKEN"] = "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" 
+#I placed this in a .env file, but due to the clarity of this coding challenge, i placed it visibly
+
 
 # Load tokenizer and model
 model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -22,11 +24,9 @@ model = AutoModelForCausalLM.from_pretrained(
     token=os.environ["HUGGINGFACE_TOKEN"]
 )
 
-# Load and preprocess data
 df = pd.read_csv("data/financial_summaries/financial_summary_all.csv")
 df.dropna(inplace=True)
 
-# Reshape the DataFrame to long format: one row per (company, period, metric)
 melted_df = df.melt(
     id_vars=["company", "period"],
     value_vars=["Revenue", "COGS", "Gross Profit", "Operating Expenses", "Operating Income", "Net Income"],
@@ -34,25 +34,18 @@ melted_df = df.melt(
     value_name="value"
 )
 
-# Drop rows with missing values
 melted_df.dropna(inplace=True)
-
-# Convert to natural language documents
 documents = [
     f"In {row['period']}, {row['company']} had a {row['metric']} of {row['value']}."
     for _, row in melted_df.iterrows()
 ]
 
-# Convert to LangChain Document objects
 docs = [Document(page_content=doc) for doc in documents]
 
-# Embedding model
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-# Vector store
 vector_store = FAISS.from_documents(docs, embedding_model)
 
-# HuggingFace text generation pipeline
 text_gen_pipeline = pipeline(
     "text-generation",
     model=model,

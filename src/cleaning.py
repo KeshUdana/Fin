@@ -3,6 +3,7 @@ import re
 import spacy
 import os
 import random
+import re
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -28,16 +29,11 @@ financial_keywords = {
     ]
 }
 
-import random
-import re
-
 def extract_period(text, default_year=None):
     if default_year is None:
         default_year = random.randint(2005, 2023)
 
     text_lower = text.lower()
-
-    # Enhanced quarter logic
     quarter = None
     if "3 months ended" in text_lower or "three months ended" in text_lower or "quarter ended" in text_lower:
         if "march" in text_lower:
@@ -49,7 +45,6 @@ def extract_period(text, default_year=None):
         elif "december" in text_lower:
             quarter = "Q4"
 
-    # Rule 2: Check for date formats like DD.MM.YYYY and map month to quarter
     date_matches = re.findall(r'\b\d{1,2}[./-](\d{1,2})[./-](\d{2,4})\b', text)
     for match in date_matches:
         try:
@@ -68,7 +63,6 @@ def extract_period(text, default_year=None):
         except ValueError:
             continue  # skip malformed matches
 
-    # Extract the year (last 2 or 4 digits) from the text
     match = re.search(r'(20\d{2}|\d{2})', text_lower)
     if match:
         year = int(match.group(1))
@@ -76,7 +70,6 @@ def extract_period(text, default_year=None):
             year += 2000
         return f"{quarter} {year}" if quarter else f"FY{year}"
 
-    # Fallback to standard patterns
     patterns = [
         r'FY\s?(\d{2,4})',
         r'(Q[1-4])\s?[/-]?\s?(20\d{2}|\d{2})',
@@ -210,7 +203,6 @@ def extract_quarter(period_str):
             return match.group(0)
     return None
 
-# --- Main Execution ---
 all_dfs = []
 for path in input_paths:
     company = os.path.basename(path).split('_')[0]
@@ -228,7 +220,6 @@ combined = combined.drop(columns=['filename', 'page'], errors='ignore')
 combined['quarter'] = combined['period'].apply(extract_quarter)
 
 def quarter_sort_key(row):
-    # Use period_numeric as base, add fraction based on quarter number for sorting
     quarter_map = {'Q1': 0.0, 'Q2': 0.25, 'Q3': 0.5, 'Q4': 0.75}
     base = row['period_numeric'] if pd.notnull(row['period_numeric']) else 0
     q_frac = quarter_map.get(row['quarter'], 0)
@@ -236,8 +227,6 @@ def quarter_sort_key(row):
 
 combined['quarter_sort_key'] = combined.apply(quarter_sort_key, axis=1)
 combined = combined.sort_values(by='quarter_sort_key')
-
-# Save by quarter
 for q in ['Q1', 'Q2', 'Q3', 'Q4']:
     quarter_df = combined[combined['quarter'] == q]
     if not quarter_df.empty:

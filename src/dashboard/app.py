@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import re
 
-# --- Helper Function to Sort Periods Smartly ---
 def sort_periods(periods):
     def extract_sort_key(p):
         match = re.search(r'(\d{4})', p)
@@ -22,7 +21,6 @@ def sort_periods(periods):
             return (year, 99)
     return sorted(periods, key=extract_sort_key)
 
-# --- Load Data ---
 @st.cache_data
 def load_data():
     df = pd.read_csv("data\\financial_summaries\\financial_summary_all.csv")
@@ -33,7 +31,6 @@ def load_data():
 
 df = load_data()
 
-# --- Sidebar filters ---
 st.sidebar.title("Company Filter")
 
 company_names = sorted(df['company'].dropna().unique())
@@ -42,10 +39,7 @@ selected_company = st.sidebar.selectbox("Select Company", company_names)
 all_periods = sort_periods(df['period'].unique())
 selected_years = st.sidebar.multiselect("Select Periods", all_periods, default=all_periods)
 
-# --- Filtered DataFrame for selected company and period ---
 filtered_df = df[(df['company'] == selected_company) & (df['period'].isin(selected_years))]
-
-# --- Metric Definitions ---
 metrics = {
     "Revenue": "Revenue",
     "Cost of Goods Sold (COGS)": "COGS",

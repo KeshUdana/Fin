@@ -24,7 +24,6 @@ income_keywords = [
 ]
 
 # Regex to detect period on the page
-# Regex to detect period on the page
 period_patterns = [
     # Original patterns
     r"(?:Year|12 months|Twelve months)\s+(?:ended|to)\s+(?:31st\s+)?(?:March|December|June|September)[ ,\d]+",
@@ -81,7 +80,7 @@ def is_probable_financial_row(line):
     has_multiple_numbers = count_numeric_values(line) >= 2
     return has_financial_noun and has_multiple_numbers
 
-# --- PHASE 1: Extract Financial Lines from PDFs ---
+
 for company in companies:
     input_path = os.path.join(input_folder, company)
     output_file = os.path.join(output_folder, f"{company}_income_nlp.csv")

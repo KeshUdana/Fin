@@ -78,7 +78,6 @@ def prepare_qa_chain():
 
 import streamlit as st
 
-# Initialize session state for chat history
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -90,19 +89,16 @@ qa_chain = prepare_qa_chain()
 
 def add_message(user_msg, bot_msg):
     st.session_state.chat_history.append({"user": user_msg, "bot": bot_msg})
-
-# Display chat messages
 for chat in st.session_state.chat_history:
     st.markdown(f"**You:** {chat['user']}")
     st.markdown(f"**Assistant:** {chat['bot']}")
 
-# User input
 user_question = st.text_input("Ask a financial question:", key="input")
 
 if st.button("Send") and user_question:
     with st.spinner("Thinking..."):
         answer = qa_chain.run(user_question)
         add_message(user_question, answer)
-        st.experimental_rerun()  # Refresh to show the new chat message
+        st.experimental_rerun()  
 
 
