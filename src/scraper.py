@@ -79,7 +79,7 @@ def download_pdf(url, save_dir):
     save_path = os.path.join(save_dir, filename)
 
     if os.path.exists(save_path):
-        print(f"✅ Already downloaded: {filename}")
+        print(f" Already downloaded: {filename}")
         return
 
     try:
@@ -87,9 +87,9 @@ def download_pdf(url, save_dir):
         response.raise_for_status()
         with open(save_path, "wb") as f:
             f.write(response.content)
-        print(f"✅ Downloaded: {filename}")
+        print(f"Downloaded: {filename}")
     except Exception as e:
-        print(f"❌ Error downloading {url}: {e}")
+        print(f"Error downloading {url}: {e}")
 
 
 def scrape_company(driver, company, url):
@@ -105,7 +105,7 @@ def scrape_company(driver, company, url):
         links = quarterly_section.find_elements(By.XPATH, './/a[contains(@href, ".pdf")]')
 
         if not links:
-            print("⚠️ No quarterly PDF links found.")
+            print("No quarterly PDF links found.")
             return
 
         for link in links:
@@ -113,7 +113,7 @@ def scrape_company(driver, company, url):
             if pdf_url and "/upload_report_file/" in pdf_url:
                 download_pdf(pdf_url, os.path.join(BASE_SAVE_DIR, company))
     except Exception as e:
-        print(f"❌ Error scraping quarterly PDFs for {company}: {e}")
+        print(f"Error scraping quarterly PDFs for {company}: {e}")
 
 
 

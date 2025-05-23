@@ -24,11 +24,40 @@ income_keywords = [
 ]
 
 # Regex to detect period on the page
+# Regex to detect period on the page
 period_patterns = [
+    # Original patterns
     r"(?:Year|12 months|Twelve months)\s+(?:ended|to)\s+(?:31st\s+)?(?:March|December|June|September)[ ,\d]+",
     r"03\s*months\s+(?:ended|to)\s+(?:31st\s+)?(?:March|December|June|September)[ ,\d]+",
-    r"\d{2}\.\d{2}\.\d{4}"  # For formats like 31.03.2013
+    r"\d{2}\.\d{2}\.\d{4}",  # For formats like 31.03.2013
+
+    # === New extended patterns ===
+
+    # Matches formats like: 3 months ended 30th June, 9 months ended 31st December
+    r"\d{1,2}\s*months\s+(?:ended|to)\s+(?:31st\s+)?(?:March|April|May|June|July|August|September|October|November|December)[ ,\d]+",
+
+    # Matches multiple period phrases on the same line
+    r"(?:\d{1,2}\s*months\s+(?:ended|to)\s+(?:31st\s+)?(?:March|April|May|June|July|August|September|October|November|December)[ ,\d]+\s*)+",
+
+    # Matches: FOR THE YEAR ENDED 31ST MARCH
+    r"(?:FOR\s+THE\s+YEAR\s+ENDED\s+31ST\s+(?:March|December|June|September))",
+
+    # Matches: YEAR ENDED 31ST MARCH or similar variants
+    r"(?:YEAR\s+ENDED\s+(?:31ST\s+)?(?:March|December|June|September)[ ,\d]*)",
+
+    # Matches: 2013 2012 Change
+    r"\b\d{4}\s+\d{4}\s+Change\b",
+
+    # Matches: 2013 2012 2013 2012
+    r"\b\d{4}\s+\d{4}(?:\s+\d{4}\s+\d{4})+\b",
+
+    # Matches: Rs. '000 Rs. '000 % Rs. '000 Rs. '000 %
+    r"Rs\.?\s*'000\s+Rs\.?\s*'000\s+%(\s+Rs\.?\s*'000\s+Rs\.?\s*'000\s+%)?",
+
+    # Matches just years (for cases like 2013 2012 or more repeated)
+    r"(?:\b\d{4}\b(?:\s+){1,2}){2,4}"
 ]
+
 
 def contains_income_keyword(text):
     return any(kw.lower() in text.lower() for kw in income_keywords)
