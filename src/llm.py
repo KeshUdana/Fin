@@ -7,74 +7,67 @@ from langchain.llms import HuggingFacePipeline
 import pandas as pd
 import torch
 import os
-import re
+from dotenv import load_dotenv
 
-# Set Hugging Face token
-os.environ["HUGGINGFACE_TOKEN"] = "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"
+load_dotenv()
+
+# Hugging Face token
+hf_token = os.getenv("HUGGINGFACE_TOKEN") or "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"
+os.environ["HUGGINGFACE_TOKEN"] = hf_token
+
+model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 # Load tokenizer and model
-model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-tokenizer = AutoTokenizer.from_pretrained(model_id, token=os.environ["HUGGINGFACE_TOKEN"])
+tokenizer = AutoTokenizer.from_pretrained(model_id, use_auth_token=hf_token)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
+    use_auth_token=hf_token,
     device_map="auto",
-    torch_dtype=torch.float16,
-    token=os.environ["HUGGINGFACE_TOKEN"]
+    torch_dtype=torch.float16
 )
 
-# Load and clean data
+# Load and preprocess data
 df = pd.read_csv("data/financial_summaries/combined_financial_summary.csv")
 df.dropna(inplace=True)
 
-# Normalize period column to extract FY and FQ
-def extract_fy_fq(period):
-    fy_match = re.search(r"FY\s*(\d{2,4})", period, re.IGNORECASE)
-    fq_match = re.search(r"Q([1-4])", period, re.IGNORECASE)
-    fy = None
-    fq = None
-    if fy_match:
-        fy = fy_match.group(1)
-        fy = "20" + fy[-2:] if len(fy) == 2 else fy
-    if fq_match:
-        fq = f"Q{fq_match.group(1)}"
-    return pd.Series([fy, fq])
-
-df[['fy', 'fq']] = df['period'].apply(extract_fy_fq)
-
-# Melt the dataframe into long format
+# Melt wide format to long format so 'metric' and 'value' columns exist
 melted_df = df.melt(
-    id_vars=["company", "period", "fy", "fq"],
+    id_vars=["company", "period"],
     value_vars=["Revenue", "COGS", "Gross Profit", "Operating Expenses", "Operating Income", "Net Income"],
     var_name="metric",
     value_name="value"
 )
 melted_df.dropna(inplace=True)
 
-# Create documents for vector store
+# Create text documents for each row
 documents = [
-    f"In fiscal year {row['fy']} {row['fq'] or ''}, {row['company']} had a {row['metric']} of {row['value']}."
+    f"In {row['period']}, {row['company']} had a {row['metric']} of {row['value']}."
     for _, row in melted_df.iterrows()
 ]
 docs = [Document(page_content=doc) for doc in documents]
 
-# Build vector store using BAAI embeddings
-embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+# Load embeddings
+embedding_model = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-en-v1.5",
+    model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
+)
+
 vector_store = FAISS.from_documents(docs, embedding_model)
 
-# Build text generation pipeline
+# Setup text generation pipeline
 text_gen_pipeline = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
     max_new_tokens=256,
     do_sample=False,
-    temperature=0.2
+    temperature=0.2,
+    device=0 if torch.cuda.is_available() else -1
 )
 
 llm = HuggingFacePipeline(pipeline=text_gen_pipeline)
 retriever = vector_store.as_retriever(search_kwargs={"k": 5})
 
-# Create QA chain
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=retriever,
@@ -82,7 +75,7 @@ qa_chain = RetrievalQA.from_chain_type(
 )
 
 # Example query
-query = "How much revenue did DIPD make in FY2021?"
-result = qa_chain.invoke(query)
+query = "How much revenue did DIPD make in FY2000?"
+result = qa_chain.run(query)
 
-print("Answer:", result['result'])
+print("Answer:", result)
