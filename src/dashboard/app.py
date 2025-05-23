@@ -25,7 +25,7 @@ def sort_periods(periods):
 # --- Load Data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data\\financial_summaries\\combined_financial_summary.csv")
+    df = pd.read_csv("data\\financial_summaries\\financial_summary_all.csv")
     df.dropna(subset=["Revenue", "Net Income"], inplace=True)
     df.dropna(subset=['period'], inplace=True)
     df['period'] = df['period'].astype(str).str.strip()

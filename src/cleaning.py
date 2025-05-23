@@ -28,10 +28,55 @@ financial_keywords = {
     ]
 }
 
-# === Period Extraction ===
+import random
+import re
+
 def extract_period(text, default_year=None):
     if default_year is None:
         default_year = random.randint(2005, 2023)
+
+    text_lower = text.lower()
+
+    # Enhanced quarter logic
+    quarter = None
+    if "3 months ended" in text_lower or "three months ended" in text_lower or "quarter ended" in text_lower:
+        if "march" in text_lower:
+            quarter = "Q1"
+        elif "june" in text_lower:
+            quarter = "Q2"
+        elif "september" in text_lower:
+            quarter = "Q3"
+        elif "december" in text_lower:
+            quarter = "Q4"
+
+    # Rule 2: Check for date formats like DD.MM.YYYY and map month to quarter
+    date_matches = re.findall(r'\b\d{1,2}[./-](\d{1,2})[./-](\d{2,4})\b', text)
+    for match in date_matches:
+        try:
+            month = int(match[0])
+            year = int(match[1])
+            if year < 100:
+                year += 2000
+            if month == 3:
+                return f"Q1 {year}"
+            elif month == 6:
+                return f"Q2 {year}"
+            elif month == 9:
+                return f"Q3 {year}"
+            elif month == 12:
+                return f"Q4 {year}"
+        except ValueError:
+            continue  # skip malformed matches
+
+    # Extract the year (last 2 or 4 digits) from the text
+    match = re.search(r'(20\d{2}|\d{2})', text_lower)
+    if match:
+        year = int(match.group(1))
+        if year < 100:
+            year += 2000
+        return f"{quarter} {year}" if quarter else f"FY{year}"
+
+    # Fallback to standard patterns
     patterns = [
         r'FY\s?(\d{2,4})',
         r'(Q[1-4])\s?[/-]?\s?(20\d{2}|\d{2})',
@@ -57,7 +102,10 @@ def extract_period(text, default_year=None):
                 return f"FY{int(groups[0])}"
             elif len(groups) == 1:
                 return f"FY{int(groups[0])}"
+
     return f"FY{default_year}"
+
+
 
 def extract_numbers(text):
     raw_numbers = re.findall(r'-?\(?\d[\d,]*\)?', text)
@@ -156,8 +204,11 @@ def remove_outliers_iqr(df):
     return df
 
 def extract_quarter(period_str):
-    match = re.search(r'Q([1-4])', period_str)
-    return f"Q{match.group(1)}" if match else None
+    if isinstance(period_str, str):
+        match = re.search(r'Q[1-4]', period_str)
+        if match:
+            return match.group(0)
+    return None
 
 # --- Main Execution ---
 all_dfs = []
@@ -173,8 +224,20 @@ combined['period_numeric'] = combined['period'].apply(period_to_numeric)
 combined = clean_and_impute(combined)
 combined = remove_outliers_iqr(combined)
 
-# --- Quarter-based Split ---
+combined = combined.drop(columns=['filename', 'page'], errors='ignore')
 combined['quarter'] = combined['period'].apply(extract_quarter)
+
+def quarter_sort_key(row):
+    # Use period_numeric as base, add fraction based on quarter number for sorting
+    quarter_map = {'Q1': 0.0, 'Q2': 0.25, 'Q3': 0.5, 'Q4': 0.75}
+    base = row['period_numeric'] if pd.notnull(row['period_numeric']) else 0
+    q_frac = quarter_map.get(row['quarter'], 0)
+    return base + q_frac
+
+combined['quarter_sort_key'] = combined.apply(quarter_sort_key, axis=1)
+combined = combined.sort_values(by='quarter_sort_key')
+
+# Save by quarter
 for q in ['Q1', 'Q2', 'Q3', 'Q4']:
     quarter_df = combined[combined['quarter'] == q]
     if not quarter_df.empty:
