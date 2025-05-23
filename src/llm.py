@@ -7,67 +7,68 @@ from langchain.llms import HuggingFacePipeline
 import pandas as pd
 import torch
 import os
-from dotenv import load_dotenv
+import re
 
-load_dotenv()
-
-# Hugging Face token
-hf_token = os.getenv("HUGGINGFACE_TOKEN") or "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"
-os.environ["HUGGINGFACE_TOKEN"] = hf_token
-
-model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+# Set Hugging Face token
+os.environ["HUGGINGFACE_TOKEN"] = "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"
 
 # Load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained(model_id, use_auth_token=hf_token)
+model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+tokenizer = AutoTokenizer.from_pretrained(model_id, token=os.environ["HUGGINGFACE_TOKEN"])
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    use_auth_token=hf_token,
     device_map="auto",
-    torch_dtype=torch.float16
+    torch_dtype=torch.float16,
+    token=os.environ["HUGGINGFACE_TOKEN"]
 )
 
 # Load and preprocess data
-df = pd.read_csv("data/financial_summaries/combined_financial_summary.csv")
+df = pd.read_csv("data/financial_summaries/financial_summary_all.csv")
 df.dropna(inplace=True)
 
-# Melt wide format to long format so 'metric' and 'value' columns exist
+# Reshape the DataFrame to long format: one row per (company, period, metric)
 melted_df = df.melt(
     id_vars=["company", "period"],
     value_vars=["Revenue", "COGS", "Gross Profit", "Operating Expenses", "Operating Income", "Net Income"],
     var_name="metric",
     value_name="value"
 )
+
+# Drop rows with missing values
 melted_df.dropna(inplace=True)
 
-# Create text documents for each row
+# Convert to natural language documents
 documents = [
     f"In {row['period']}, {row['company']} had a {row['metric']} of {row['value']}."
     for _, row in melted_df.iterrows()
 ]
+
+# Convert to LangChain Document objects
 docs = [Document(page_content=doc) for doc in documents]
 
-# Load embeddings
-embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-en-v1.5",
-    model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
-)
+# Embedding model
+embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+# Vector store
 vector_store = FAISS.from_documents(docs, embedding_model)
 
-# Setup text generation pipeline
+# HuggingFace text generation pipeline
 text_gen_pipeline = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
     max_new_tokens=256,
     do_sample=False,
-    temperature=0.2,
-    device=0 if torch.cuda.is_available() else -1
+    temperature=0.2
 )
 
+# Wrap LLM for LangChain
 llm = HuggingFacePipeline(pipeline=text_gen_pipeline)
+
+# Retriever
 retriever = vector_store.as_retriever(search_kwargs={"k": 5})
 
+# QA chain setup
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=retriever,
@@ -75,7 +76,8 @@ qa_chain = RetrievalQA.from_chain_type(
 )
 
 # Example query
-query = "How much revenue did DIPD make in FY2000?"
-result = qa_chain.run(query)
+query = "How much revenue did DIPD make in FY2021?"
+result = qa_chain.invoke(query)
 
-print("Answer:", result)
+# Output
+print("Answer:", result['result'])
